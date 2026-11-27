@@ -6,6 +6,7 @@ import { TextEditor } from './components/TextEditor'
 import { ThemeToggle } from './components/ThemeToggle'
 import { VoiceClonePanel } from './components/VoiceClonePanel'
 import { useSpeech } from './hooks/useSpeech'
+import { useI18n } from './i18n'
 import { SAMPLE_TEXT, prepareSpeechText } from './utils/text'
 
 interface Preferences {
@@ -40,6 +41,7 @@ function readStored<T>(key: string, fallback: T): T {
 }
 
 export default function App() {
+  const { locale, setLocale, t } = useI18n()
   const [preferences, setPreferences] = useState<Preferences>(() => readStored(PREFERENCES_KEY, DEFAULT_PREFERENCES))
   const [text, setText] = useState(() => readStored(TEXT_KEY, ''))
   const [history, setHistory] = useState<HistoryItem[]>(() => readStored(HISTORY_KEY, []))
@@ -183,24 +185,35 @@ export default function App() {
   })
 
   const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+  const speechError = speech.error?.match(/^Speech stopped: (.+)\. Try another voice or browser\.$/)
+  const displayedSpeechError = speechError
+    ? `${t('Speech stopped')}: ${speechError[1]}. ${t('Try another voice or browser.')}`
+    : t(speech.error)
 
   return (
     <div className="app-shell">
       <header className="site-header">
-        <a className="brand" href="#home" aria-label="VocalFree home">
+        <a className="brand" href="#home" aria-label={t('VocalFree home')}>
           <span className="brand-mark"><AudioLines size={21} strokeWidth={2.2} /></span>
           <span>vocal<span>free</span></span>
-          <span className="free-badge">FREE</span>
+          <span className="free-badge">{t('FREE')}</span>
         </a>
-        <nav className={`main-nav ${mobileMenuOpen ? 'mobile-open' : ''}`} aria-label="Main navigation">
-          <a href="#home" onClick={() => setMobileMenuOpen(false)}>Home</a>
-          <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
-          <a href="#about" onClick={() => setMobileMenuOpen(false)}>About</a>
+        <nav className={`main-nav ${mobileMenuOpen ? 'mobile-open' : ''}`} aria-label={t('Main navigation')}>
+          <a href="#home" onClick={() => setMobileMenuOpen(false)}>{t('Home')}</a>
+          <a href="#features" onClick={() => setMobileMenuOpen(false)}>{t('Features')}</a>
+          <a href="#about" onClick={() => setMobileMenuOpen(false)}>{t('About')}</a>
         </nav>
         <div className="header-actions">
-          <span className="free-promise"><span /> Free forever</span>
+          <span className="free-promise"><span /> {t('Free forever')}</span>
+          <label className="language-select">
+            <span className="sr-only">{t('Display language')}</span>
+            <select value={locale} onChange={(event) => setLocale(event.target.value as 'en' | 'hi')} aria-label={t('Display language')}>
+              <option value="en">English</option>
+              <option value="hi">हिन्दी</option>
+            </select>
+          </label>
           <ThemeToggle dark={preferences.dark} onToggle={toggleTheme} />
-          <button className="mobile-menu-button" type="button" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileMenuOpen}>
+          <button className="mobile-menu-button" type="button" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label={t(mobileMenuOpen ? 'Close menu' : 'Open menu')} aria-expanded={mobileMenuOpen}>
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
@@ -208,10 +221,10 @@ export default function App() {
 
       <main id="home">
         <section className="hero">
-          <span className="eyebrow"><span className="eyebrow-line" /> YOUR WORDS, OUT LOUD</span>
-          <h1>Give your words<br /><span>a voice.</span></h1>
-          <p>Turn text into speech with the voices on your device.<br className="desktop-break" /> Free to use, private by design, and always ready to listen.</p>
-          <a className="hero-link" href="#workspace">Start listening <ArrowDown size={15} /></a>
+          <span className="eyebrow"><span className="eyebrow-line" /> {t('YOUR WORDS, OUT LOUD')}</span>
+          <h1>{t('Give your words')}<br /><span>{t('a voice.')}</span></h1>
+          <p>{t('Turn text into speech with the voices on your device.')}<br className="desktop-break" /> {t('Free to use, private by design, and always ready to listen.')}</p>
+          <a className="hero-link" href="#workspace">{t('Start listening')} <ArrowDown size={15} /></a>
           <div className="hero-decoration" aria-hidden="true">
             {[12, 21, 32, 18, 38, 24, 45, 28, 16, 36, 22, 42, 18, 30, 13, 26, 40, 20, 33, 15, 27, 38, 17, 29].map((height, index) => (
               <span key={index} style={{ height: `${height}px` }} />
@@ -219,7 +232,7 @@ export default function App() {
           </div>
         </section>
 
-        <section id="workspace" className="workspace" aria-label="Text to speech workspace">
+        <section id="workspace" className="workspace" aria-label={t('Text to speech workspace')}>
           <div className="workspace-main">
             <TextEditor
               text={text}
@@ -227,19 +240,24 @@ export default function App() {
               onPaste={() => void pasteText()}
               onCopy={() => void copyText()}
               onClear={() => { setText(''); speech.setError('') }}
-              onSample={() => { setText(SAMPLE_TEXT); setNotice('Sample text added.') }}
+              onSample={() => {
+                setText(locale === 'hi'
+                  ? 'VocalFree में आपका स्वागत है। अपने डिवाइस की आवाज़ों से टेक्स्ट को स्पीच में बदलें। आपका टेक्स्ट इसी ब्राउज़र में रहता है।'
+                  : SAMPLE_TEXT)
+                setNotice('Sample text added.')
+              }}
             />
-            <VoiceClonePanel text={text} />
+            <VoiceClonePanel text={text} rate={preferences.rate} volume={preferences.volume} />
             {(speech.error || notice || !speechSupported) && (
               <div className={`notice ${speech.error || !speechSupported ? 'notice-error' : ''}`} role={speech.error || !speechSupported ? 'alert' : 'status'}>
                 <CircleHelp size={17} aria-hidden="true" />
-                <span>{speech.error || notice || 'Speech synthesis is not supported in this browser. Try a current browser with Web Speech API support.'}</span>
-                <button type="button" className="notice-dismiss" onClick={() => { speech.setError(''); setNotice('') }} aria-label="Dismiss message"><X size={15} /></button>
+                <span>{displayedSpeechError || t(notice) || t('Speech synthesis is not supported in this browser. Try a current browser with Web Speech API support.')}</span>
+                <button type="button" className="notice-dismiss" onClick={() => { speech.setError(''); setNotice('') }} aria-label={t('Dismiss message')}><X size={15} /></button>
               </div>
             )}
             <div className="workspace-footnote">
               <LockKeyhole size={14} />
-              <span>Your text and voice sample stay in your browser; model files download from Hugging Face and jsDelivr.</span>
+              <span>{t('Your text and voice sample stay in your browser; model files download from Hugging Face and jsDelivr.')}</span>
             </div>
           </div>
           <aside className="workspace-sidebar">
@@ -286,24 +304,24 @@ export default function App() {
 
         <section id="features" className="feature-section">
           <div className="section-intro">
-            <span className="eyebrow"><span className="eyebrow-line" /> SIMPLE BY NATURE</span>
-            <h2>Everything you need.<br /><span>Nothing you don’t.</span></h2>
+            <span className="eyebrow"><span className="eyebrow-line" /> {t('SIMPLE BY NATURE')}</span>
+            <h2>{t('Everything you need.')}<br /><span>{t('Nothing you don’t.')}</span></h2>
           </div>
           <div className="feature-grid">
             <article className="feature-card">
               <span className="feature-icon"><Headphones size={20} /></span>
-              <h3>Listen your way</h3>
-              <p>Choose from voices installed on your device. Adjust the pace, pitch, and volume until it feels right.</p>
+              <h3>{t('Listen your way')}</h3>
+              <p>{t('Choose from voices installed on your device. Adjust the pace, pitch, and volume until it feels right.')}</p>
             </article>
             <article className="feature-card">
               <span className="feature-icon"><LockKeyhole size={20} /></span>
-              <h3>Private by default</h3>
-              <p>Standard speech runs in your browser; voice cloning runs on your local device. Text and recordings are not sent to a cloud service.</p>
+              <h3>{t('Private by default')}</h3>
+              <p>{t('Standard speech runs in your browser; voice cloning runs on your local device. Text and recordings are not sent to a cloud service.')}</p>
             </article>
             <article className="feature-card">
               <span className="feature-icon"><AudioLines size={20} /></span>
-              <h3>Clone voices on-device</h3>
-              <p>Prepare a short voice recording and generate a WAV directly in your browser. Your sample and text stay on your device.</p>
+              <h3>{t('Clone voices on-device')}</h3>
+              <p>{t('Record or import a voice sample longer than 5 and shorter than 60 seconds, then generate a WAV directly in your browser. Your sample and text stay on your device.')}</p>
             </article>
           </div>
         </section>
@@ -311,8 +329,8 @@ export default function App() {
         <section id="about" className="about-strip">
           <div className="about-icon"><CircleHelp size={20} /></div>
           <div>
-            <h2>A quick note about voices</h2>
-            <p>Standard listening uses your browser’s built-in speech synthesis; voice selection and playback depend on your device. To create a WAV file with a cloned voice, load the optional browser model. Model files download once; voice samples and text stay on your device.</p>
+            <h2>{t('A quick note about voices')}</h2>
+            <p>{t('Standard listening uses your browser’s built-in speech synthesis; voice selection and playback depend on your device. To create a WAV file with a cloned voice, load the optional browser model. Model files download once; voice samples and text stay on your device.')}</p>
           </div>
         </section>
       </main>
@@ -322,8 +340,8 @@ export default function App() {
           <span className="brand-mark"><AudioLines size={18} /></span>
           <span>vocal<span>free</span></span>
         </a>
-        <p>Free speech, made simple.</p>
-        <span className="footer-right">No sign-up. No subscription. Just your voice.</span>
+        <p>{t('Free speech, made simple.')}</p>
+        <span className="footer-right">{t('No sign-up. No subscription. Just your voice.')}</span>
       </footer>
     </div>
   )

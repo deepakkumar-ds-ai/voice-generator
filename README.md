@@ -5,8 +5,10 @@ A free, responsive text-to-speech web app built with React, TypeScript, Vite, Ta
 ## What it does
 
 - Speaks text with voices provided by the user's browser and operating system.
+- Generates downloadable WAV speech with built-in local model voices, without recording browser audio.
 - Optionally clones a voice from an audio recording in the browser and creates downloadable WAV audio.
 - Supports available browser voices and languages, with a default voice selected automatically.
+- Provides an English/Hindi interface with a language selector.
 - Splits longer input into sequential chunks to avoid common browser utterance-size problems.
 - Offers speed, pitch, and volume settings, plus pause, resume, stop, and repeat controls.
 - Keeps the draft, preferences, and up to eight recent texts in local browser storage.
@@ -18,7 +20,7 @@ A free, responsive text-to-speech web app built with React, TypeScript, Vite, Ta
 
 Speech quality, voice names, language support, and playback behavior depend on the browser and voices installed on the device. Some browsers may offer no voices or may restrict speech while a page is in the background. Playback is free to repeat, but subject to those device/browser limitations.
 
-Browser speech speaks directly and does not provide an audio file. The optional local voice-cloning feature generates a WAV file instead.
+Browser speech speaks directly and does not provide an audio file. To download audio without recording, load the local Pocket TTS model and generate a WAV with one of its built-in English voices. Speed and volume settings affect generated downloads; changing speed also changes pitch, while the pitch setting is for browser playback.
 
 ## Requirements
 
@@ -47,7 +49,7 @@ npm run preview
 
 Voice cloning runs entirely in the browser using Pocket TTS ONNX via `pocket-tts-js`; no Python service or inference API is required. The first model load downloads quantized model assets from Hugging Face and the ONNX runtime from jsDelivr, then caches them in the browser. The total download is roughly 150 MB, so an internet connection is needed initially. Text and reference audio are processed locally and are not uploaded. The current browser integration generates English speech only.
 
-The browser downloads the selected ONNX assets on first use, then keeps them in Cache Storage for later sessions. Use a clear 2–10 second recording and confirm you have permission to clone that voice. Pocket TTS is by Kyutai; its model weights are licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See the [Pocket TTS model card](https://huggingface.co/kyutai/pocket-tts) for attribution and usage terms.
+The browser downloads the selected ONNX assets on first use, then keeps them in Cache Storage for later sessions. Record with your microphone or import a clear audio sample longer than 5 seconds and shorter than 60 seconds (up to 25 MB), and confirm you have permission to clone that voice. Pocket TTS processes the reference audio locally. Pocket TTS is by Kyutai; its model weights are licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See the [Pocket TTS model card](https://huggingface.co/kyutai/pocket-tts) for attribution and usage terms.
 
 ## Deploy
 

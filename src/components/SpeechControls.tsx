@@ -1,6 +1,7 @@
 import { Pause, Play, RotateCw, Square } from 'lucide-react'
 import type { SpeechStatus } from '../hooks/useSpeech'
 import { VoiceSelector } from './VoiceSelector'
+import { useI18n } from '../i18n'
 
 interface SpeechControlsProps {
   status: SpeechStatus
@@ -26,18 +27,19 @@ interface SpeechControlsProps {
 }
 
 export function SpeechControls(props: SpeechControlsProps) {
+  const { t } = useI18n()
   const isActive = props.status !== 'idle'
 
   return (
-    <section className="controls-card" aria-label="Speech settings and controls">
+    <section className="controls-card" aria-label={t('Speech settings and controls')}>
       <div className="controls-heading">
         <div>
-          <h2>Voice &amp; settings</h2>
-          <p>Make it sound the way you like.</p>
+          <h2>{t('Voice & settings')}</h2>
+          <p>{t('Make it sound the way you like.')}</p>
         </div>
         <span className={`status-pill ${props.status}`}>
           <span className="status-dot" />
-          {props.status === 'speaking' ? 'Speaking' : props.status === 'paused' ? 'Paused' : 'Ready'}
+          {props.status === 'speaking' ? t('Speaking') : props.status === 'paused' ? t('Paused') : t('Ready')}
         </span>
       </div>
 
@@ -53,7 +55,7 @@ export function SpeechControls(props: SpeechControlsProps) {
       <div className="sliders">
         <RangeSetting
           id="speed"
-          label="Speed"
+          label={t('Speed')}
           value={props.rate}
           min={0.5}
           max={2}
@@ -63,7 +65,7 @@ export function SpeechControls(props: SpeechControlsProps) {
         />
         <RangeSetting
           id="pitch"
-          label="Pitch"
+          label={t('Pitch')}
           value={props.pitch}
           min={0}
           max={2}
@@ -73,7 +75,7 @@ export function SpeechControls(props: SpeechControlsProps) {
         />
         <RangeSetting
           id="volume"
-          label="Volume"
+          label={t('Volume')}
           value={props.volume}
           min={0}
           max={1}
@@ -90,15 +92,15 @@ export function SpeechControls(props: SpeechControlsProps) {
           onClick={isActive ? props.onStop : props.onListen}
           disabled={!props.hasText && !isActive}
         >
-          {isActive ? <><Square size={16} fill="currentColor" /> Stop</> : <><Play size={17} fill="currentColor" /> Listen</>}
+          {isActive ? <><Square size={16} fill="currentColor" /> {t('Stop')}</> : <><Play size={17} fill="currentColor" /> {t('Listen')}</>}
         </button>
         {props.status === 'paused' ? (
           <button className="secondary-button" type="button" onClick={props.onResume}>
-            <Play size={16} fill="currentColor" /> Resume
+            <Play size={16} fill="currentColor" /> {t('Resume')}
           </button>
         ) : (
           <button className="secondary-button" type="button" onClick={props.onPause} disabled={props.status !== 'speaking'}>
-            <Pause size={16} fill="currentColor" /> Pause
+            <Pause size={16} fill="currentColor" /> {t('Pause')}
           </button>
         )}
         <button
@@ -106,13 +108,13 @@ export function SpeechControls(props: SpeechControlsProps) {
           type="button"
           onClick={() => props.onRepeatChange(!props.repeat)}
           aria-pressed={props.repeat}
-          aria-label={props.repeat ? 'Turn repeat off' : 'Repeat playback'}
-          title={props.repeat ? 'Repeat is on' : 'Repeat'}
+          aria-label={t(props.repeat ? 'Turn repeat off' : 'Repeat playback')}
+          title={t(props.repeat ? 'Repeat is on' : 'Repeat')}
         >
           <RotateCw size={17} />
         </button>
       </div>
-      <p className="keyboard-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to listen <span>·</span> <kbd>Esc</kbd> to stop</p>
+      <p className="keyboard-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> {t('to listen')} <span>·</span> <kbd>Esc</kbd> {t('to stop')}</p>
     </section>
   )
 }

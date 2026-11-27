@@ -1,28 +1,46 @@
 import { useEffect, useRef, useState } from 'react'
-import { Download, Mic2, Sparkles } from 'lucide-react'
+import { Download, Mic2, Sparkles, Square } from 'lucide-react'
 import { chunksToWavBlob, PocketTTS } from 'pocket-tts-js'
+import { useI18n } from '../i18n'
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 const MAX_TEXT_LENGTH = 10_000
-const MIN_REFERENCE_SECONDS = 2
-const MAX_REFERENCE_SECONDS = 10
+const MIN_REFERENCE_DURATION_MS = 5_000
+const MAX_REFERENCE_DURATION_MS = 60_000
+const AUTO_STOP_RECORDING_MS = 59_000
 
 interface VoiceClonePanelProps {
   text: string
+  rate: number
+  volume: number
 }
 
-export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
+export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
+  const { t } = useI18n()
   const modelRef = useRef<PocketTTS | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const recordingChunksRef = useRef<Blob[]>([])
+  const recordingStartedAtRef = useRef(0)
+  const recordingTimerRef = useRef<number | null>(null)
+  const recordingTooLargeRef = useRef(false)
   const [referenceAudio, setReferenceAudio] = useState<File | null>(null)
   const [clonedVoice, setClonedVoice] = useState('')
   const [modelLoaded, setModelLoaded] = useState(false)
   const [loadingModel, setLoadingModel] = useState(false)
   const [modelProgress, setModelProgress] = useState('')
+  const [localVoices, setLocalVoices] = useState<string[]>([])
+  const [localVoice, setLocalVoice] = useState('')
+  const [generatingLocalSpeech, setGeneratingLocalSpeech] = useState(false)
+  const [localAudioUrl, setLocalAudioUrl] = useState('')
   const [preparingVoice, setPreparingVoice] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
   const [audioUrl, setAudioUrl] = useState('')
+  const [recording, setRecording] = useState(false)
+  const [startingRecording, setStartingRecording] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(0)
   const modelReady = modelLoaded && modelRef.current?.ready === true
 
   useEffect(() => () => {
@@ -31,8 +49,122 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
   }, [])
 
   useEffect(() => () => {
+    if (recordingTimerRef.current !== null) window.clearInterval(recordingTimerRef.current)
+    if (recorderRef.current?.state !== 'inactive') recorderRef.current?.stop()
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+  }, [])
+
+  useEffect(() => () => {
     if (audioUrl) URL.revokeObjectURL(audioUrl)
   }, [audioUrl])
+
+  useEffect(() => () => {
+    if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
+  }, [localAudioUrl])
+
+  const clearVoice = () => {
+    setReferenceAudio(null)
+    setClonedVoice('')
+    setAudioUrl('')
+  }
+
+  const startRecording = async () => {
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setError(t('Voice recording is not supported in this browser. Try a current browser on localhost or HTTPS.'))
+      return
+    }
+
+    clearVoice()
+    setError('')
+    setRecordingDuration(0)
+    recordingChunksRef.current = []
+    recordingTooLargeRef.current = false
+    setStartingRecording(true)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type))
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      recorderRef.current = recorder
+      recordingStartedAtRef.current = Date.now()
+
+      recorder.ondataavailable = (event) => {
+        if (!event.data.size) return
+        recordingChunksRef.current.push(event.data)
+        const totalBytes = recordingChunksRef.current.reduce((total, chunk) => total + chunk.size, 0)
+        if (totalBytes > MAX_AUDIO_BYTES) {
+          recordingTooLargeRef.current = true
+          setError(t('The recording reached the 25 MB limit. Please record a shorter sample.'))
+          if (recorder.state !== 'inactive') recorder.stop()
+        }
+      }
+      recorder.onstop = () => {
+        if (recordingTimerRef.current !== null) {
+          window.clearInterval(recordingTimerRef.current)
+          recordingTimerRef.current = null
+        }
+        const duration = Date.now() - recordingStartedAtRef.current
+        setRecording(false)
+        setRecordingDuration(duration)
+        stream.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+        recorderRef.current = null
+        const chunks = recordingChunksRef.current
+        recordingChunksRef.current = []
+
+        if (recordingTooLargeRef.current) return
+        if (duration <= MIN_REFERENCE_DURATION_MS) {
+          setError(t('Record for more than 5 seconds before stopping.'))
+          return
+        }
+        if (duration >= MAX_REFERENCE_DURATION_MS) {
+          setError(t('The voice sample must be shorter than 60 seconds. Please record a new sample.'))
+          return
+        }
+
+        const type = recorder.mimeType || chunks[0]?.type || 'audio/webm'
+        const extension = type.includes('mp4') ? 'm4a' : 'webm'
+        const file = new File(chunks, `voice-recording.${extension}`, { type })
+        if (!file.size) {
+          setError(t('The browser did not capture any audio. Check microphone access and try again.'))
+          return
+        }
+        setReferenceAudio(file)
+      }
+      recorder.onerror = () => {
+        setError(t('Recording stopped unexpectedly. Check microphone access and try again.'))
+      }
+      recorder.start(1000)
+      setRecording(true)
+      recordingTimerRef.current = window.setInterval(() => {
+        const duration = Date.now() - recordingStartedAtRef.current
+        setRecordingDuration(duration)
+        if (duration >= AUTO_STOP_RECORDING_MS && recorder.state === 'recording') recorder.stop()
+      }, 250)
+    } catch (recordingError) {
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+      recorderRef.current = null
+      const name = recordingError instanceof DOMException ? recordingError.name : ''
+      setError(name === 'NotAllowedError' || name === 'PermissionDeniedError'
+        ? t('Microphone permission was denied. Allow microphone access in your browser and try again.')
+        : name === 'NotFoundError'
+          ? t('No microphone was found. Connect a microphone or import an audio recording.')
+          : recordingError instanceof Error
+            ? recordingError.message
+            : t('Could not start microphone recording.'))
+    } finally {
+      setStartingRecording(false)
+    }
+  }
+
+  const stopRecording = () => {
+    const duration = Date.now() - recordingStartedAtRef.current
+    if (duration <= MIN_REFERENCE_DURATION_MS || duration >= MAX_REFERENCE_DURATION_MS) return
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+  }
 
   const loadModel = async () => {
     if (modelRef.current?.ready) return true
@@ -42,7 +174,7 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
     setModelLoaded(false)
     setLoadingModel(true)
     setError('')
-    setModelProgress('Starting browser model…')
+    setModelProgress(t('Starting browser model…'))
     const model = new PocketTTS({
       language: 'english_2026-04',
       quantized: true,
@@ -56,18 +188,20 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
       const bundle = await model.load((progress) => {
         if (progress.type === 'progress' && progress.total) {
           const percent = Math.floor((progress.loaded ?? 0) / progress.total * 100)
-          const message = `${progress.label ?? 'Model files'}: ${percent}%${progress.fromCache ? ' (cached)' : ''}`
+          const message = `${t(progress.label ?? 'Model files')}: ${percent}%${progress.fromCache ? ' (cached)' : ''}`
           if (message !== lastProgress) {
             lastProgress = message
             setModelProgress(message)
           }
         } else if (progress.status) {
-          setModelProgress(progress.status)
+          setModelProgress(t(progress.status))
         }
       })
       if (!bundle) throw new Error('The model did not finish loading.')
+      setLocalVoices(bundle.predefinedVoices)
+      setLocalVoice((current) => bundle.predefinedVoices.includes(current) ? current : bundle.predefinedVoices[0] ?? '')
       setModelLoaded(true)
-      setModelProgress('Model ready in your browser.')
+      setModelProgress(t('Model ready in your browser.'))
       return true
     } catch (loadError) {
       model.destroy()
@@ -75,8 +209,8 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
       setModelProgress('')
       const message = loadError instanceof Error ? loadError.message : ''
       setError(message === 'Worker error'
-        ? 'The browser worker could not load. Keep this site running on localhost or HTTPS, and check access to Hugging Face and jsDelivr.'
-        : message || 'Could not load the browser voice model.')
+        ? t('The browser worker could not load. Keep this site running on localhost or HTTPS, and check access to Hugging Face and jsDelivr.')
+        : t(message || 'Could not load the browser voice model.'))
       return false
     } finally {
       setLoadingModel(false)
@@ -84,46 +218,45 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
   }
 
   const handleFileChange = (file: File | undefined) => {
-    setReferenceAudio(null)
-    setClonedVoice('')
+    clearVoice()
     setError('')
-    setAudioUrl('')
+    setRecordingDuration(0)
     if (!file) return
     if (!file.type.startsWith('audio/') && !/\.(wav|mp3|m4a|ogg|webm|flac)$/i.test(file.name)) {
-      setError('Choose an audio recording supported by your browser.')
+      setError(t('Choose an audio recording supported by your browser.'))
       return
     }
     if (file.size > MAX_AUDIO_BYTES) {
-      setError('The recording must be 25 MB or smaller.')
+      setError(t('The recording must be 25 MB or smaller.'))
       return
     }
     setReferenceAudio(file)
   }
 
   const prepareVoice = async () => {
-    if (!referenceAudio || !consent || preparingVoice) return
+    if (!referenceAudio || !consent || preparingVoice || recording || startingRecording) return
 
     setPreparingVoice(true)
     setError('')
     setAudioUrl('')
     let audioContext: AudioContext | null = null
     try {
-      if (!modelRef.current?.ready && !(await loadModel())) return
-      const model = modelRef.current
-      if (!model?.ready) throw new Error('The browser model is not ready. Load it again and retry.')
-
       audioContext = new AudioContext()
       const decoded = await audioContext.decodeAudioData(await referenceAudio.arrayBuffer())
-      if (decoded.duration < MIN_REFERENCE_SECONDS || decoded.duration > MAX_REFERENCE_SECONDS) {
-        throw new Error(`Use a clear recording between ${MIN_REFERENCE_SECONDS} and ${MAX_REFERENCE_SECONDS} seconds long.`)
+      if (decoded.duration <= MIN_REFERENCE_DURATION_MS / 1000 || decoded.duration >= MAX_REFERENCE_DURATION_MS / 1000) {
+        throw new Error(t('Choose or record a voice sample longer than 5 seconds and shorter than 60 seconds.'))
       }
+      if (!modelRef.current?.ready && !(await loadModel())) return
+      const model = modelRef.current
+      if (!model?.ready) throw new Error(t('The browser model is not ready. Load it again and retry.'))
+
       const voice = await model.cloneVoice(decoded.getChannelData(0).slice(), {
         inputSampleRate: decoded.sampleRate,
       })
       setClonedVoice(voice)
     } catch (cloneError) {
       setClonedVoice('')
-      setError(cloneError instanceof Error ? cloneError.message : 'Could not prepare this voice recording.')
+      setError(t(cloneError instanceof Error ? cloneError.message : 'Could not prepare this voice recording.'))
     } finally {
       if (audioContext && audioContext.state !== 'closed') await audioContext.close()
       setPreparingVoice(false)
@@ -135,7 +268,7 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
     const cleanText = text.trim()
     if (!model || !clonedVoice || !consent || !cleanText || generating) return
     if (cleanText.length > MAX_TEXT_LENGTH) {
-      setError(`Text must be ${MAX_TEXT_LENGTH.toLocaleString()} characters or fewer.`)
+      setError(t('Text must be 10,000 characters or fewer.'))
       return
     }
 
@@ -148,12 +281,49 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
         voice: clonedVoice,
         onChunk: (audio) => chunks.push(audio.slice()),
       })
-      if (!chunks.length) throw new Error('The model did not produce any audio.')
+      if (!chunks.length) throw new Error(t('The model did not produce any audio.'))
       setAudioUrl(URL.createObjectURL(chunksToWavBlob(chunks, model.sampleRate)))
     } catch (generationError) {
-      setError(generationError instanceof Error ? generationError.message : 'Could not generate cloned speech.')
+      setError(t(generationError instanceof Error ? generationError.message : 'Could not generate cloned speech.'))
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const generateLocalSpeech = async () => {
+    const model = modelRef.current
+    const cleanText = text.trim()
+    if (!model?.ready || !localVoice || !cleanText || loadingModel || preparingVoice || generating || generatingLocalSpeech || recording || startingRecording) return
+    if (cleanText.length > MAX_TEXT_LENGTH) {
+      setError(t('Text must be 10,000 characters or fewer.'))
+      return
+    }
+
+    setGeneratingLocalSpeech(true)
+    setError('')
+    setLocalAudioUrl('')
+    const chunks: Float32Array[] = []
+    try {
+      const voice = await model.loadVoice(localVoice)
+      await model.generate(cleanText, {
+        voice,
+        onChunk: (audio) => chunks.push(audio.slice()),
+      })
+      if (!chunks.length) throw new Error(t('The model did not produce any audio.'))
+      const adjustedChunks = volume === 1
+        ? chunks
+        : chunks.map((chunk) => {
+          const adjusted = chunk.slice()
+          for (let index = 0; index < adjusted.length; index += 1) adjusted[index] *= volume
+          return adjusted
+        })
+      const outputSampleRate = Math.round(model.sampleRate * rate)
+      const wav = chunksToWavBlob(adjustedChunks, outputSampleRate)
+      setLocalAudioUrl(URL.createObjectURL(wav))
+    } catch (generationError) {
+      setError(t(generationError instanceof Error ? generationError.message : 'Could not generate local speech.'))
+    } finally {
+      setGeneratingLocalSpeech(false)
     }
   }
 
@@ -162,33 +332,105 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
       <div className="clone-heading">
         <span className="feature-icon"><Mic2 size={19} /></span>
         <div>
-          <h2 id="clone-heading">Clone a voice in your browser</h2>
-          <p>Prepare a voice recording, then generate English speech on this device.</p>
+          <h2 id="clone-heading">{t('Local voice tools')}</h2>
+          <p>{t('Generate downloadable speech with a built-in voice or prepare a voice recording to clone.')}</p>
         </div>
       </div>
 
       <div className="model-status" role="status" aria-live="polite">
         <span className={`status-dot ${modelReady ? 'ready' : ''}`} />
-        {modelProgress || 'Load the voice model before preparing a recording.'}
+        {modelProgress || t('Load the voice model before generating speech or preparing a recording.')}
       </div>
       <button
         className="secondary-button clone-model-button"
         type="button"
         onClick={() => void loadModel()}
-        disabled={modelReady || loadingModel}
+        disabled={modelReady || loadingModel || preparingVoice || generating || generatingLocalSpeech || recording || startingRecording}
       >
-        {loadingModel ? 'Loading model…' : modelReady ? 'Model ready' : 'Download & load browser model'}
+        {loadingModel ? t('Loading model…') : modelReady ? t('Model ready') : t('Download & load browser model')}
       </button>
 
+      {error && <p className="clone-error" role="alert">{t(error)}</p>}
+
+      <div className="local-speech">
+        <h3>{t('Download speech audio')}</h3>
+        <p className="field-note">{t('Choose a built-in English voice. Speech is generated locally as a WAV file without recording.')}</p>
+        <label className="local-voice-select">
+          <span className="control-label">{t('Local voice')}</span>
+          <select
+            value={localVoice}
+            onChange={(event) => {
+              setLocalVoice(event.target.value)
+              setLocalAudioUrl('')
+            }}
+            disabled={!modelReady || preparingVoice || generating || generatingLocalSpeech}
+          >
+            {localVoices.length
+              ? localVoices.map((voice) => <option key={voice} value={voice}>{voice}</option>)
+              : <option value="">{t('Load the model to see available voices')}</option>}
+          </select>
+        </label>
+        <button
+          className="primary-button clone-generate"
+          type="button"
+          onClick={() => void generateLocalSpeech()}
+          disabled={!modelReady || !localVoice || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || preparingVoice || generating || generatingLocalSpeech || loadingModel || recording || startingRecording}
+        >
+          <Sparkles size={16} />
+          {generatingLocalSpeech ? t('Generating on this device…') : t('Generate WAV')}
+        </button>
+        <p className="field-note local-speech-note">
+          {t('The Speed and Volume settings in Voice & settings affect downloads. Changing speed also changes pitch; Pitch affects only browser playback.')}
+        </p>
+        {localAudioUrl && (
+          <div className="clone-result">
+            <audio controls src={localAudioUrl}>{t('Your browser cannot play this audio.')}</audio>
+            <a className="secondary-button clone-download" href={localAudioUrl} download="vocalfree-speech.wav">
+              <Download size={15} /> {t('Download WAV')}
+            </a>
+          </div>
+        )}
+      </div>
+
+      <div className="clone-divider" role="separator" />
+
+      <h3 className="clone-section-title">{t('Clone a voice in your browser')}</h3>
+      <div className="clone-recorder">
+        <span className="control-label">{t('Record a reference voice (more than 5 and less than 60 seconds, up to 25 MB)')}</span>
+        <button
+          className={`secondary-button clone-record-button ${recording ? 'is-recording' : ''}`}
+          type="button"
+          onClick={recording ? stopRecording : () => void startRecording()}
+          disabled={loadingModel || preparingVoice || generating || generatingLocalSpeech || startingRecording || (recording && (recordingDuration <= MIN_REFERENCE_DURATION_MS || recordingDuration >= MAX_REFERENCE_DURATION_MS))}
+        >
+          {recording ? <><Square size={15} fill="currentColor" /> {t('Stop recording')}</> : <><Mic2 size={15} /> {startingRecording ? t('Connecting microphone…') : t('Start recording')}</>}
+        </button>
+        {recording && (
+          <span className="field-note recording-status" role="status" aria-live="polite">
+            {t('Recording')}: {formatRecordingTime(recordingDuration)}
+            {recordingDuration <= MIN_REFERENCE_DURATION_MS
+              ? t(' — keep speaking for more than 5 seconds')
+              : t(' — recording will stop before 60 seconds')}
+          </span>
+        )}
+      </div>
+
       <label className="clone-upload">
-        <span className="control-label">Reference voice (audio, 2–10 seconds, up to 25 MB)</span>
+        <span className="control-label">{t('Or import a reference recording (more than 5 and less than 60 seconds, up to 25 MB)')}</span>
         <input
           type="file"
           accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac"
-          disabled={loadingModel || preparingVoice || generating}
+          disabled={loadingModel || preparingVoice || generating || generatingLocalSpeech || recording || startingRecording}
           onChange={(event) => handleFileChange(event.target.files?.[0])}
         />
-        {referenceAudio && <span className="field-note">{referenceAudio.name}</span>}
+        {referenceAudio && (
+          <span className="field-note">
+            {referenceAudio.name}
+            {recordingDuration > MIN_REFERENCE_DURATION_MS
+              ? ` · ${formatRecordingTime(recordingDuration)}`
+              : ` · ${t('must be longer than 5 and shorter than 60 seconds')}`}
+          </span>
+        )}
       </label>
 
       <label className="consent-check">
@@ -200,42 +442,47 @@ export function VoiceClonePanel({ text }: VoiceClonePanelProps) {
             if (!event.target.checked) setClonedVoice('')
           }}
         />
-        <span>I own this voice or have the speaker’s permission to clone it.</span>
+        <span>{t('I own this voice or have the speaker’s permission to clone it.')}</span>
       </label>
 
       <button
         className="secondary-button clone-prepare"
         type="button"
         onClick={() => void prepareVoice()}
-        disabled={!modelReady || loadingModel || !referenceAudio || !consent || preparingVoice}
+        disabled={!modelReady || loadingModel || !referenceAudio || !consent || preparingVoice || generatingLocalSpeech || recording || startingRecording}
       >
         <Mic2 size={15} />
-        {preparingVoice ? 'Preparing voice on this device…' : clonedVoice ? 'Voice ready' : 'Prepare voice'}
+        {preparingVoice ? t('Preparing voice on this device…') : clonedVoice ? t('Voice ready') : t('Prepare voice')}
       </button>
-
-      {error && <p className="clone-error" role="alert">{error}</p>}
 
       <button
         className="primary-button clone-generate"
         type="button"
         onClick={() => void generate()}
-        disabled={!clonedVoice || !consent || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || generating}
+        disabled={!clonedVoice || !consent || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || generating || generatingLocalSpeech}
       >
         <Sparkles size={16} />
-        {generating ? 'Generating on this device…' : 'Generate cloned voice'}
+        {generating ? t('Generating on this device…') : t('Generate cloned voice')}
       </button>
 
       {audioUrl && (
         <div className="clone-result">
-          <audio controls src={audioUrl}>Your browser cannot play this audio.</audio>
+          <audio controls src={audioUrl}>{t('Your browser cannot play this audio.')}</audio>
           <a className="secondary-button clone-download" href={audioUrl} download="vocalfree-clone.wav">
-            <Download size={15} /> Download WAV
+            <Download size={15} /> {t('Download WAV')}
           </a>
         </div>
       )}
       <p className="clone-footnote">
-        Voice audio and text stay in your browser. The first model download is about 150 MB from Hugging Face and jsDelivr, then it is cached on this device. Only clone voices with permission.
+        {t('Voice audio and text stay in your browser. The first model download is about 150 MB from Hugging Face and jsDelivr, then it is cached on this device. Only clone voices with permission.')}
       </p>
     </section>
   )
+}
+
+function formatRecordingTime(milliseconds: number) {
+  const totalSeconds = Math.floor(milliseconds / 1000)
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0')
+  return `${minutes}:${seconds}`
 }

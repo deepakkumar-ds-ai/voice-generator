@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { splitIntoSpeechChunks } from '../utils/text'
+import { useI18n } from '../i18n'
 
 export type SpeechStatus = 'idle' | 'speaking' | 'paused'
 
@@ -12,6 +13,7 @@ interface UseSpeechOptions {
 }
 
 export function useSpeech({ voice, rate, pitch, volume, onComplete }: UseSpeechOptions) {
+  const { t } = useI18n()
   const [status, setStatus] = useState<SpeechStatus>('idle')
   const [error, setError] = useState('')
   const chunksRef = useRef<string[]>([])
@@ -60,16 +62,16 @@ export function useSpeech({ voice, rate, pitch, volume, onComplete }: UseSpeechO
       chunksRef.current = []
     }
     window.speechSynthesis.speak(utterance)
-  }, [])
+  }, [t])
 
   const start = useCallback((text: string) => {
     if (!('speechSynthesis' in window)) {
-      setError('Speech synthesis is not supported in this browser. Try a current version of Chrome, Edge, Safari, or Firefox.')
+      setError(t('Speech synthesis is not supported in this browser. Try a current version of Chrome, Edge, Safari, or Firefox.'))
       return
     }
     const chunks = splitIntoSpeechChunks(text)
     if (!chunks.length) {
-      setError('Add some text before you listen.')
+      setError(t('Add some text before you listen.'))
       return
     }
 
@@ -81,7 +83,7 @@ export function useSpeech({ voice, rate, pitch, volume, onComplete }: UseSpeechO
     indexRef.current = 0
     setStatus('speaking')
     speakNext(generation)
-  }, [speakNext])
+  }, [speakNext, t])
 
   const pause = useCallback(() => {
     if (status === 'speaking') {

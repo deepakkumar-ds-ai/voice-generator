@@ -77,6 +77,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visi
 .main-nav a { color: var(--muted); font-size: 13px; font-weight: 500; transition: color 140ms ease; }
 .main-nav a:hover { color: var(--accent); }
 .header-actions { display: flex; align-items: center; gap: 17px; }
+.language-select select { height: 37px; min-width: 76px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: 11px; cursor: pointer; }
 .free-promise { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .free-promise > span, .privacy-dot { width: 7px; height: 7px; border-radius: 50%; background: #54b999; box-shadow: 0 0 0 3px rgba(84, 185, 153, .13); }
 .theme-toggle, .mobile-menu-button { width: 37px; height: 37px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); cursor: pointer; transition: border-color 140ms ease, color 140ms ease; }
@@ -111,6 +112,20 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visi
 .model-status .status-dot { flex: 0 0 auto; }
 .model-status .status-dot.ready { background: #54b999; }
 .clone-model-button { width: 100%; margin-top: 9px; }
+.local-speech { margin-top: 18px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.local-speech h3, .clone-section-title { margin: 0; font-family: 'Manrope', 'Segoe UI', sans-serif; font-size: 12px; font-weight: 700; }
+.local-speech > .field-note { margin: 5px 0 12px; line-height: 1.6; }
+.local-voice-select { display: block; margin-top: 12px; }
+.local-voice-select select { width: 100%; height: 39px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 11px; }
+.local-voice-select select:disabled { opacity: .6; }
+.local-speech-note { margin: 9px 0 0; line-height: 1.6; }
+.clone-divider { height: 1px; margin: 20px 0 16px; border: 0; background: var(--line); }
+.clone-section-title { margin-bottom: 14px; }
+.clone-recorder { margin-top: 16px; }
+.clone-record-button { width: 100%; }
+.clone-record-button.is-recording { border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); }
+.recording-status { line-height: 1.6; }
+.clone-upload { margin-top: 16px; }
 .clone-prepare { width: 100%; margin-top: 14px; }
 .clone-error { margin: 12px 0 0; color: var(--danger); font-size: 11px; line-height: 1.5; }
 .clone-generate { width: 100%; margin-top: 16px; }
