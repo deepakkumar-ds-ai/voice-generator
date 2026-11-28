@@ -10,6 +10,10 @@ export function prepareSpeechText(text: string): string {
     .join('\n\n')
 }
 
+export function containsDevanagariText(text: string): boolean {
+  return /[\u0900-\u097F]/u.test(text)
+}
+
 export function splitIntoSpeechChunks(text: string, maxLength = 220): string[] {
   const paragraphs = prepareSpeechText(text).split(/\n{2,}/)
   const chunks: string[] = []
@@ -23,6 +27,8 @@ export function splitIntoSpeechChunks(text: string, maxLength = 220): string[] {
         window.lastIndexOf('! '),
         window.lastIndexOf('? '),
         window.lastIndexOf('; '),
+        window.lastIndexOf('। '),
+        window.lastIndexOf('॥ '),
       )
       const wordEnd = window.lastIndexOf(' ')
       const splitAt = sentenceEnd >= Math.floor(maxLength * 0.55)

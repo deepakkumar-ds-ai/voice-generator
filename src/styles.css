@@ -111,6 +111,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visi
 .model-status { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .model-status .status-dot { flex: 0 0 auto; }
 .model-status .status-dot.ready { background: #54b999; }
+.clone-language-warning { margin: 10px 0 0; padding: 9px 10px; border-left: 2px solid var(--accent); background: var(--surface-soft); color: var(--muted); font-size: 10px; line-height: 1.6; }
 .clone-model-button { width: 100%; margin-top: 9px; }
 .local-speech { margin-top: 18px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
 .local-speech h3, .clone-section-title { margin: 0; font-family: 'Manrope', 'Segoe UI', sans-serif; font-size: 12px; font-weight: 700; }
@@ -129,6 +130,12 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visi
 .clone-prepare { width: 100%; margin-top: 14px; }
 .clone-error { margin: 12px 0 0; color: var(--danger); font-size: 11px; line-height: 1.5; }
 .clone-generate { width: 100%; margin-top: 16px; }
+.generation-progress { display: grid; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 10px; }
+.generation-progress-track { position: relative; height: 5px; overflow: hidden; border-radius: 5px; background: var(--line); }
+.generation-progress-track::after { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: inherit; background: var(--accent); content: ''; animation: generation-progress 1.4s ease-in-out infinite; }
+.generation-progress-track.determinate::after { display: none; }
+.generation-progress-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 160ms ease; }
+@keyframes generation-progress { from { transform: translateX(-105%); } to { transform: translateX(265%); } }
 .clone-result { display: grid; gap: 10px; margin-top: 16px; }
 .clone-result audio { width: 100%; }
 .clone-download { text-decoration: none; }

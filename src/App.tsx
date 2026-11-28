@@ -73,6 +73,7 @@ export default function App() {
   )
   const speech = useSpeech({
     voice: selectedVoice,
+    voices,
     rate: preferences.rate,
     pitch: preferences.pitch,
     volume: preferences.volume,

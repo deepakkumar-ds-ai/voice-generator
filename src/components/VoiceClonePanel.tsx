@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Download, Mic2, Sparkles, Square } from 'lucide-react'
 import { chunksToWavBlob, PocketTTS } from 'pocket-tts-js'
 import { useI18n } from '../i18n'
+import { containsDevanagariText } from '../utils/text'
+import { HindiSpeechGenerator } from './HindiSpeechGenerator'
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 const MAX_TEXT_LENGTH = 10_000
@@ -24,6 +26,8 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
   const recordingStartedAtRef = useRef(0)
   const recordingTimerRef = useRef<number | null>(null)
   const recordingTooLargeRef = useRef(false)
+  const generatedAudioDurationRef = useRef(0)
+  const reportedAudioSecondsRef = useRef(0)
   const [referenceAudio, setReferenceAudio] = useState<File | null>(null)
   const [clonedVoice, setClonedVoice] = useState('')
   const [modelLoaded, setModelLoaded] = useState(false)
@@ -32,6 +36,7 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
   const [localVoices, setLocalVoices] = useState<string[]>([])
   const [localVoice, setLocalVoice] = useState('')
   const [generatingLocalSpeech, setGeneratingLocalSpeech] = useState(false)
+  const [generatedAudioSeconds, setGeneratedAudioSeconds] = useState(0)
   const [localAudioUrl, setLocalAudioUrl] = useState('')
   const [preparingVoice, setPreparingVoice] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -42,6 +47,7 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
   const [startingRecording, setStartingRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const modelReady = modelLoaded && modelRef.current?.ready === true
+  const hasUnsupportedScript = containsDevanagariText(text)
 
   useEffect(() => () => {
     modelRef.current?.destroy()
@@ -66,6 +72,16 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
     setReferenceAudio(null)
     setClonedVoice('')
     setAudioUrl('')
+  }
+
+  const recordGeneratedChunk = (chunks: Float32Array[], audio: Float32Array, sampleRate: number) => {
+    chunks.push(audio.slice())
+    generatedAudioDurationRef.current += audio.length / sampleRate
+    const seconds = Math.floor(generatedAudioDurationRef.current)
+    if (seconds !== reportedAudioSecondsRef.current) {
+      reportedAudioSecondsRef.current = seconds
+      setGeneratedAudioSeconds(seconds)
+    }
   }
 
   const startRecording = async () => {
@@ -267,6 +283,10 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
     const model = modelRef.current
     const cleanText = text.trim()
     if (!model || !clonedVoice || !consent || !cleanText || generating) return
+    if (containsDevanagariText(cleanText)) {
+      setError(t('The local WAV model supports English only. To hear Hindi, use Listen with an installed Hindi voice.'))
+      return
+    }
     if (cleanText.length > MAX_TEXT_LENGTH) {
       setError(t('Text must be 10,000 characters or fewer.'))
       return
@@ -275,11 +295,14 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
     setGenerating(true)
     setError('')
     setAudioUrl('')
+    generatedAudioDurationRef.current = 0
+    reportedAudioSecondsRef.current = 0
+    setGeneratedAudioSeconds(0)
     const chunks: Float32Array[] = []
     try {
       await model.generate(cleanText, {
         voice: clonedVoice,
-        onChunk: (audio) => chunks.push(audio.slice()),
+        onChunk: (audio) => recordGeneratedChunk(chunks, audio, model.sampleRate),
       })
       if (!chunks.length) throw new Error(t('The model did not produce any audio.'))
       setAudioUrl(URL.createObjectURL(chunksToWavBlob(chunks, model.sampleRate)))
@@ -294,6 +317,10 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
     const model = modelRef.current
     const cleanText = text.trim()
     if (!model?.ready || !localVoice || !cleanText || loadingModel || preparingVoice || generating || generatingLocalSpeech || recording || startingRecording) return
+    if (containsDevanagariText(cleanText)) {
+      setError(t('The local WAV model supports English only. To hear Hindi, use Listen with an installed Hindi voice.'))
+      return
+    }
     if (cleanText.length > MAX_TEXT_LENGTH) {
       setError(t('Text must be 10,000 characters or fewer.'))
       return
@@ -302,12 +329,15 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
     setGeneratingLocalSpeech(true)
     setError('')
     setLocalAudioUrl('')
+    generatedAudioDurationRef.current = 0
+    reportedAudioSecondsRef.current = 0
+    setGeneratedAudioSeconds(0)
     const chunks: Float32Array[] = []
     try {
       const voice = await model.loadVoice(localVoice)
       await model.generate(cleanText, {
         voice,
-        onChunk: (audio) => chunks.push(audio.slice()),
+        onChunk: (audio) => recordGeneratedChunk(chunks, audio, model.sampleRate),
       })
       if (!chunks.length) throw new Error(t('The model did not produce any audio.'))
       const adjustedChunks = volume === 1
@@ -341,6 +371,11 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
         <span className={`status-dot ${modelReady ? 'ready' : ''}`} />
         {modelProgress || t('Load the voice model before generating speech or preparing a recording.')}
       </div>
+      {hasUnsupportedScript && (
+        <p className="clone-language-warning" role="note">
+          {t('Pocket TTS supports English only. Use the Hindi generator below for Devanagari text.')}
+        </p>
+      )}
       <button
         className="secondary-button clone-model-button"
         type="button"
@@ -374,11 +409,12 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
           className="primary-button clone-generate"
           type="button"
           onClick={() => void generateLocalSpeech()}
-          disabled={!modelReady || !localVoice || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || preparingVoice || generating || generatingLocalSpeech || loadingModel || recording || startingRecording}
+          disabled={!modelReady || !localVoice || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || hasUnsupportedScript || preparingVoice || generating || generatingLocalSpeech || loadingModel || recording || startingRecording}
         >
           <Sparkles size={16} />
           {generatingLocalSpeech ? t('Generating on this device…') : t('Generate WAV')}
         </button>
+        {generatingLocalSpeech && <GenerationProgress seconds={generatedAudioSeconds} />}
         <p className="field-note local-speech-note">
           {t('The Speed and Volume settings in Voice & settings affect downloads. Changing speed also changes pitch; Pitch affects only browser playback.')}
         </p>
@@ -391,6 +427,8 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
           </div>
         )}
       </div>
+
+      <HindiSpeechGenerator text={text} rate={rate} volume={volume} />
 
       <div className="clone-divider" role="separator" />
 
@@ -459,11 +497,12 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
         className="primary-button clone-generate"
         type="button"
         onClick={() => void generate()}
-        disabled={!clonedVoice || !consent || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || generating || generatingLocalSpeech}
+        disabled={!clonedVoice || !consent || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || hasUnsupportedScript || generating || generatingLocalSpeech}
       >
         <Sparkles size={16} />
         {generating ? t('Generating on this device…') : t('Generate cloned voice')}
       </button>
+      {generating && <GenerationProgress seconds={generatedAudioSeconds} />}
 
       {audioUrl && (
         <div className="clone-result">
@@ -477,6 +516,16 @@ export function VoiceClonePanel({ text, rate, volume }: VoiceClonePanelProps) {
         {t('Voice audio and text stay in your browser. The first model download is about 150 MB from Hugging Face and jsDelivr, then it is cached on this device. Only clone voices with permission.')}
       </p>
     </section>
+  )
+}
+
+function GenerationProgress({ seconds }: { seconds: number }) {
+  const { t } = useI18n()
+  return (
+    <div className="generation-progress" role="status" aria-live="polite">
+      <span>{t('Audio generated so far')}: {formatRecordingTime(seconds * 1000)}</span>
+      <div className="generation-progress-track" role="progressbar" aria-label={t('Audio generation in progress')} />
+    </div>
   )
 }
 

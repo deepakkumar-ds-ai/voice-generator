@@ -20,13 +20,14 @@ A free, responsive text-to-speech web app built with React, TypeScript, Vite, Ta
 
 Speech quality, voice names, language support, and playback behavior depend on the browser and voices installed on the device. Some browsers may offer no voices or may restrict speech while a page is in the background. Playback is free to repeat, but subject to those device/browser limitations.
 
-Browser speech speaks directly and does not provide an audio file. To download audio without recording, load the local Pocket TTS model and generate a WAV with one of its built-in English voices. Speed and volume settings affect generated downloads; changing speed also changes pitch, while the pitch setting is for browser playback.
+Browser speech speaks directly and does not provide an audio file. Hindi playback uses an installed browser/device Hindi voice when available. Hindi text can also be exported as a WAV using one of three local models: the lightweight MMS Hindi model, or Piper's Pratham and Priyamvada voices. The selected voice model downloads from Hugging Face on first use; Piper additionally loads its phonemizer assets and ONNX WebAssembly runtime. Speech generation happens in the browser. The MMS model is licensed CC BY-NC 4.0 and is for non-commercial use only. The Piper voice repository shows only a generic Creative Commons license, without a clear variant; check its [source repository](https://huggingface.co/PravalX/piper-voices) for current terms before use. Pocket TTS continues to provide the built-in English voices and English voice cloning. Speed and volume settings affect generated downloads; changing speed also changes pitch, while the pitch setting is for browser playback.
 
 ## Requirements
 
 - Node.js 18 or newer
 - npm
 - A modern browser with Web Speech API support for speaking
+- A modern browser with WebAssembly support for Hindi WAV generation
 - A modern browser with Web Workers, WebAssembly, and AudioContext for voice cloning
 
 The editor and page can still load when speech synthesis is unavailable; the app displays a helpful support message.
@@ -47,7 +48,7 @@ npm run preview
 
 ## Browser voice cloning
 
-Voice cloning runs entirely in the browser using Pocket TTS ONNX via `pocket-tts-js`; no Python service or inference API is required. The first model load downloads quantized model assets from Hugging Face and the ONNX runtime from jsDelivr, then caches them in the browser. The total download is roughly 150 MB, so an internet connection is needed initially. Text and reference audio are processed locally and are not uploaded. The current browser integration generates English speech only.
+Voice cloning runs entirely in the browser using Pocket TTS ONNX via `pocket-tts-js`; no Python service or inference API is required. The first model load downloads quantized model assets from Hugging Face and the ONNX runtime from jsDelivr, then caches them in the browser. The total download is roughly 150 MB, so an internet connection is needed initially. Text and reference audio are processed locally and are not uploaded. Pocket TTS and its cloning flow currently generate English speech only. Hindi WAV generation offers three local voices: the MMS VITS model, with quantized ONNX weights of about 38 MB provided by Xenova from Meta's `facebook/mms-tts-hin`, and Piper's Pratham and Priyamvada voices, each about 64 MB. Piper's phonemizer assets are about 18 MB and its ONNX WebAssembly runtime is about 14 MB before compression. The MMS model is licensed CC BY-NC 4.0, so its use is restricted to non-commercial purposes. The Piper repository's license metadata is ambiguous; check the [Hindi MMS model card](https://huggingface.co/Xenova/mms-tts-hin), [base model license](https://huggingface.co/facebook/mms-tts-hin), and [Piper voice repository](https://huggingface.co/PravalX/piper-voices) for attribution and usage terms.
 
 The browser downloads the selected ONNX assets on first use, then keeps them in Cache Storage for later sessions. Record with your microphone or import a clear audio sample longer than 5 seconds and shorter than 60 seconds (up to 25 MB), and confirm you have permission to clone that voice. Pocket TTS processes the reference audio locally. Pocket TTS is by Kyutai; its model weights are licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See the [Pocket TTS model card](https://huggingface.co/kyutai/pocket-tts) for attribution and usage terms.
 
