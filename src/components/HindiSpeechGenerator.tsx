@@ -193,8 +193,6 @@ export function HindiSpeechGenerator({ text, rate, volume }: HindiSpeechGenerato
     }
   }
 
-  if (!hasHindiText) return null
-
   const progressPercent = generationProgress.totalChunks
     ? Math.round(generationProgress.completedChunks / generationProgress.totalChunks * 100)
     : 0
@@ -203,6 +201,7 @@ export function HindiSpeechGenerator({ text, rate, volume }: HindiSpeechGenerato
     <div className="local-speech hindi-speech">
       <h3>{t('Generate Hindi audio')}</h3>
       <p className="field-note">{t('Generate and download Hindi speech locally as a WAV file.')}</p>
+      <p className="field-note">{t('These local Hindi voices are separate from device voices. Enter Hindi text in Devanagari to generate audio.')}</p>
       <label className="local-voice-select">
         <span className="control-label">{t('Hindi voice')}</span>
         <select
@@ -225,7 +224,7 @@ export function HindiSpeechGenerator({ text, rate, volume }: HindiSpeechGenerato
         className="primary-button clone-generate"
         type="button"
         onClick={() => void generate()}
-        disabled={!text.trim() || text.trim().length > MAX_TEXT_LENGTH || generating || loadingModel}
+        disabled={!hasHindiText || !text.trim() || text.trim().length > MAX_TEXT_LENGTH || generating || loadingModel}
       >
         <Sparkles size={16} />
         {loadingModel ? t('Loading Hindi model…') : generating ? t('Generating Hindi audio…') : t('Generate Hindi WAV')}

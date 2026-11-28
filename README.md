@@ -1,3 +1,4 @@
+site is live at https://deepakkumar-ds-ai.github.io/voice-generator/
 # VocalFree
 
 A free, responsive text-to-speech web app built with React, TypeScript, Vite, Tailwind CSS, and the browser's Web Speech API. Standard speech does not need an account, API key, server, or paid speech service.

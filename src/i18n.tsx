@@ -138,6 +138,7 @@ const hindi: Record<string, string> = {
   'Pocket TTS supports English only. Use the Hindi generator below for Devanagari text.': 'Pocket TTS केवल अंग्रेज़ी का समर्थन करता है। देवनागरी टेक्स्ट के लिए नीचे हिंदी जनरेटर इस्तेमाल करें।',
   'Generate Hindi audio': 'हिंदी ऑडियो बनाएँ',
   'Generate and download Hindi speech locally as a WAV file.': 'हिंदी स्पीच को इसी डिवाइस पर WAV फ़ाइल के रूप में बनाएँ और डाउनलोड करें।',
+  'These local Hindi voices are separate from device voices. Enter Hindi text in Devanagari to generate audio.': 'ये लोकल हिंदी आवाज़ें डिवाइस की आवाज़ों से अलग हैं। ऑडियो बनाने के लिए देवनागरी में हिंदी टेक्स्ट लिखें।',
   'Hindi voice': 'हिंदी आवाज़',
   'MMS Hindi (lightweight)': 'MMS हिंदी (हल्का मॉडल)',
   'Pratham (male)': 'प्रथम (पुरुष)',
